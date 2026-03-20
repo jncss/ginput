@@ -70,6 +70,29 @@ const (
 // Color256 returns the foreground Color for a 256-color palette entry (0–255).
 func Color256(n int) Color { return Color(fmt.Sprintf("\033[38;5;%dm", n)) }
 
+// termColsOrZero returns the column count of the terminal identified by fd,
+// or 0 if the size cannot be determined (e.g. the fd is not a terminal).
+func termColsOrZero(fd int) int {
+	cols, _, err := term.GetSize(fd)
+	if err != nil || cols <= 0 {
+		return 0
+	}
+	return cols
+}
+
+// truncateLine truncates s to at most maxCols visible rune columns.
+// If maxCols <= 0 the string is returned unchanged.
+func truncateLine(s string, maxCols int) string {
+	if maxCols <= 0 {
+		return s
+	}
+	runes := []rune(s)
+	if len(runes) <= maxCols {
+		return s
+	}
+	return string(runes[:maxCols])
+}
+
 // colorWrap writes c's escape code, the text s, and the reset sequence to w.
 // When c is ColorDefault (empty string) it just writes s with no escape codes.
 func colorWrap(w io.Writer, c Color, s string) {

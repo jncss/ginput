@@ -458,6 +458,14 @@ func (mf *MultiForm) fieldRow(fieldIdx int) int {
 }
 
 func (mf *MultiForm) printIndented(w *bufio.Writer, c Color, text string) {
+	cols := termColsOrZero(int(mf.in.Fd()))
+	if avail := cols - mf.offsetX; avail > 0 {
+		lines := strings.Split(text, "\n")
+		for i, line := range lines {
+			lines[i] = truncateLine(line, avail)
+		}
+		text = strings.Join(lines, "\n")
+	}
 	if mf.offsetX <= 0 {
 		colorWrap(w, c, strings.ReplaceAll(text, "\n", "\r\n"))
 		return
@@ -472,7 +480,11 @@ func (mf *MultiForm) printStatusContent(w *bufio.Writer) {
 	if mf.offsetX > 0 {
 		fmt.Fprintf(w, "\033[%dC", mf.offsetX)
 	}
-	colorWrap(w, mf.statusColor, mf.statusMsg)
+	msg := mf.statusMsg
+	if cols := termColsOrZero(int(mf.in.Fd())); cols > 0 {
+		msg = truncateLine(msg, cols-mf.offsetX)
+	}
+	colorWrap(w, mf.statusColor, msg)
 	fmt.Fprint(w, "\033[K")
 }
 

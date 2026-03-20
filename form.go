@@ -120,8 +120,19 @@ func (l *Label) fieldRender(w *bufio.Writer) {
 	if l.marginLeft > 0 {
 		fmt.Fprintf(w, "\033[%dC", l.marginLeft)
 	}
-	colorWrap(w, l.labelColor, l.label)
-	colorWrap(w, l.textColor, l.text)
+	labelText, msgText := l.label, l.text
+	if cols := termColsOrZero(int(os.Stdout.Fd())); cols > 0 {
+		avail := cols - l.marginLeft
+		labelRunes := []rune(labelText)
+		if len(labelRunes) >= avail {
+			labelText = string(labelRunes[:avail])
+			msgText = ""
+		} else {
+			msgText = truncateLine(msgText, avail-len(labelRunes))
+		}
+	}
+	colorWrap(w, l.labelColor, labelText)
+	colorWrap(w, l.textColor, msgText)
 	fmt.Fprint(w, "\033[K") // erase to end of line so shorter updates don't leave stale text
 }
 func (l *Label) fieldRenderClean(w *bufio.Writer) { l.fieldRender(w) }
@@ -571,7 +582,11 @@ func (f *Form) printStatusContent(w *bufio.Writer) {
 	if f.offsetX > 0 {
 		fmt.Fprintf(w, "\033[%dC", f.offsetX)
 	}
-	colorWrap(w, f.statusColor, f.statusMsg)
+	msg := f.statusMsg
+	if cols := termColsOrZero(int(f.in.Fd())); cols > 0 {
+		msg = truncateLine(msg, cols-f.offsetX)
+	}
+	colorWrap(w, f.statusColor, msg)
 	fmt.Fprint(w, "\033[K") // erase to end of line so shorter updates clean up stale text
 }
 
@@ -599,6 +614,14 @@ func (f *Form) updateStatusLine(w *bufio.Writer, active int) {
 // It replaces \n with \r\n (required in raw terminal mode).
 // When offsetX is zero it is equivalent to colorWrap.
 func (f *Form) printIndented(w *bufio.Writer, c Color, text string) {
+	cols := termColsOrZero(int(f.in.Fd()))
+	if avail := cols - f.offsetX; avail > 0 {
+		lines := strings.Split(text, "\n")
+		for i, line := range lines {
+			lines[i] = truncateLine(line, avail)
+		}
+		text = strings.Join(lines, "\n")
+	}
 	if f.offsetX <= 0 {
 		colorWrap(w, c, strings.ReplaceAll(text, "\n", "\r\n"))
 		return
