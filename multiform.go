@@ -669,6 +669,13 @@ func (mf *MultiForm) Read() (map[string]map[string]string, error) {
 	p.form.entries[activeField].field.fieldRender(w)
 	w.Flush()
 
+	// Fire onPageChange for the initial page.
+	if mf.onPageChange != nil {
+		mf.onPageChange(p.key, mf.collectAll())
+		mf.updateStatusLine(w, p, activeField)
+		w.Flush()
+	}
+
 	// Fire onEnter for the initial field.
 	if e0 := p.form.entries[activeField]; e0.onEnter != nil {
 		e0.onEnter(e0.key, p.form.collect())
