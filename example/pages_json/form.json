@@ -22,7 +22,7 @@
       "pageHeader": "Address",
       "pageHeaderColor": "green",
       "fields": [
-        { "key": "street",  "prompt": "Street       : ", "maxLen": 60 },
+        { "key": "street",  "prompt": "Street       : ", "maxLen": 50 },
         { "key": "city",    "prompt": "City         : ", "maxLen": 40 },
         { "key": "country", "prompt": "Country      : ", "maxLen": 30, "default": "Spain" },
         { "key": "zip",     "prompt": "ZIP code     : ", "maxLen": 10 }
