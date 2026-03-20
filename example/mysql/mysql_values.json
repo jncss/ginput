@@ -1,0 +1,6 @@
+{
+	"db": "PRIGEST_AMNESIA2",
+	"host": "10.1.1.14",
+	"port": "3306",
+	"user": "USER"
+}
