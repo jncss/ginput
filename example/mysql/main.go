@@ -28,13 +28,13 @@ const formJSON = `{
 	"offsetX": 2,
 	"contentOffsetX": 2,
 	"fields": [
-		{ "key": "host",  "prompt": "Host:     ", "maxLen": 32, "brackets": true, "default": "localhost" },
-		{ "key": "port",  "prompt": "Port:     ", "maxLen": 5,  "brackets": true, "default": "3306", "validators": ["digits"] },
-		{ "key": "user",  "prompt": "User:     ", "maxLen": 32, "brackets": true },
-		{ "key": "pass",  "prompt": "Password: ", "maxLen": 32, "brackets": true, "mask": "*" },
-		{ "key": "db",    "prompt": "Database: ", "maxLen": 32, "brackets": true },
+		{ "key": "host",  "prompt": "Host:     ", "maxLen": 32, "default": "localhost" },
+		{ "key": "port",  "prompt": "Port:     ", "maxLen": 5,  "default": "3306", "validators": ["digits"] },
+		{ "key": "user",  "prompt": "User:     ", "maxLen": 32 },
+		{ "key": "pass",  "prompt": "Password: ", "maxLen": 32, "mask": "*" },
+		{ "key": "db",    "prompt": "Database: ", "maxLen": 32 },
 		{ "type": "separator" },
-		{ "key": "table", "prompt": "Table:    ", "maxLen": 32, "brackets": true, "validators": ["noSpace"] }
+		{ "key": "table", "prompt": "Table:    ", "maxLen": 32, "validators": ["noSpace"] }
 	]
 }`
 
