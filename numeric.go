@@ -323,7 +323,8 @@ func (n *NumericInput) render(w *bufio.Writer, value int64) {
 	if n.showBrackets {
 		fmt.Fprint(w, "[")
 	}
-	fmt.Fprint(w, n.formatDisplay(value))
+	// Render with continuous underline so the full field width is always visible.
+	fmt.Fprintf(w, "\033[4m%s\033[24m", n.formatDisplay(value))
 	if n.showBrackets {
 		fmt.Fprint(w, "]")
 	}

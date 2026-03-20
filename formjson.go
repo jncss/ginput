@@ -369,3 +369,164 @@ func resolveValidator(expr string) (func(rune, []rune) bool, error) {
 		return nil, fmt.Errorf("unknown validator %q", expr)
 	}
 }
+
+// ── MultiForm JSON support ────────────────────────────────────────────────────
+
+// PageDef describes a single page inside a MultiFormDef JSON document.
+//
+// JSON example:
+//
+//	{
+//	  "key": "address",
+//	  "pageHeader": "Postal address",
+//	  "pageHeaderColor": "green",
+//	  "fields": [
+//	    { "key": "street", "prompt": "Street: ", "maxLen": 60 }
+//	  ]
+//	}
+type PageDef struct {
+	Key             string     `json:"key"`
+	PageHeader      string     `json:"pageHeader,omitempty"`
+	PageHeaderColor string     `json:"pageHeaderColor,omitempty"`
+	LabelColor      string     `json:"labelColor,omitempty"`
+	InputColor      string     `json:"inputColor,omitempty"`
+	ContentOffsetX  int        `json:"contentOffsetX,omitempty"`
+	Fields          []FieldDef `json:"fields"`
+}
+
+// MultiFormDef is the top-level JSON structure for defining a multi-page form.
+//
+// JSON example:
+//
+//	{
+//	  "header": "=== Registration ===",
+//	  "headerColor": "white",
+//	  "footer": "PageUp/PageDown to switch pages",
+//	  "footerColor": "blue",
+//	  "statusColor": "magenta",
+//	  "offsetX": 2,
+//	  "offsetY": 1,
+//	  "pages": [
+//	    { "key": "p1", "pageHeader": "Page 1", "fields": [...] },
+//	    { "key": "p2", "pageHeader": "Page 2", "fields": [...] }
+//	  ]
+//	}
+type MultiFormDef struct {
+	Header      string    `json:"header,omitempty"`
+	HeaderColor string    `json:"headerColor,omitempty"`
+	Footer      string    `json:"footer,omitempty"`
+	FooterColor string    `json:"footerColor,omitempty"`
+	StatusColor string    `json:"statusColor,omitempty"`
+	OffsetX     int       `json:"offsetX,omitempty"`
+	OffsetY     int       `json:"offsetY,omitempty"`
+	SubmitKey   int       `json:"submitKey,omitempty"`
+	SubmitFn    int       `json:"submitFn,omitempty"`
+	Pages       []PageDef `json:"pages"`
+}
+
+// ApplyPageDefaults sets the Default field of each FieldDef in the named page
+// whose key exists in values. It modifies the receiver in place and returns it
+// for chaining.
+func (def *MultiFormDef) ApplyPageDefaults(pageKey string, values map[string]string) *MultiFormDef {
+	for i, pd := range def.Pages {
+		if pd.Key == pageKey {
+			for j := range def.Pages[i].Fields {
+				if v, ok := values[def.Pages[i].Fields[j].Key]; ok {
+					def.Pages[i].Fields[j].Default = v
+				}
+			}
+			return def
+		}
+	}
+	return def
+}
+
+// ApplyAllDefaults applies saved values to every page. The outer map key is
+// the page key; the inner map key is the field key.
+func (def *MultiFormDef) ApplyAllDefaults(all map[string]map[string]string) *MultiFormDef {
+	for pageKey, values := range all {
+		def.ApplyPageDefaults(pageKey, values)
+	}
+	return def
+}
+
+// NewPageFromDef builds a *Page from a PageDef value.
+func NewPageFromDef(def PageDef) (*Page, error) {
+	if def.Key == "" {
+		return nil, fmt.Errorf("ginput: page key is required")
+	}
+	// Re-use NewFormFromDef to build the field list, passing only
+	// field-relevant options (labelColor, inputColor, contentOffsetX).
+	fd := FormDef{
+		LabelColor:     def.LabelColor,
+		InputColor:     def.InputColor,
+		ContentOffsetX: def.ContentOffsetX,
+		Fields:         def.Fields,
+	}
+	f, err := NewFormFromDef(fd)
+	if err != nil {
+		return nil, err
+	}
+	p := &Page{key: def.Key, form: f}
+	if def.PageHeader != "" {
+		p.WithPageHeader(def.PageHeader)
+	}
+	if def.PageHeaderColor != "" {
+		p.WithPageHeaderColor(parseJSONColor(def.PageHeaderColor))
+	}
+	return p, nil
+}
+
+// NewMultiFormFromDef builds a *MultiForm from a MultiFormDef value.
+func NewMultiFormFromDef(def MultiFormDef) (*MultiForm, error) {
+	mf := NewMultiForm()
+	if def.Header != "" {
+		mf.WithHeader(def.Header)
+	}
+	if def.HeaderColor != "" {
+		mf.WithHeaderColor(parseJSONColor(def.HeaderColor))
+	}
+	if def.Footer != "" {
+		mf.WithFooter(def.Footer)
+	}
+	if def.FooterColor != "" {
+		mf.WithFooterColor(parseJSONColor(def.FooterColor))
+	}
+	if def.StatusColor != "" {
+		mf.WithStatusColor(parseJSONColor(def.StatusColor))
+	}
+	if def.OffsetX != 0 {
+		mf.WithOffsetX(def.OffsetX)
+	}
+	if def.OffsetY != 0 {
+		mf.WithOffsetY(def.OffsetY)
+	}
+	if def.SubmitKey != 0 {
+		mf.WithSubmitKey(byte(def.SubmitKey))
+	} else if def.SubmitFn >= 1 && def.SubmitFn <= 12 {
+		mf.WithSubmitFn(def.SubmitFn)
+	}
+	for i, pd := range def.Pages {
+		if pd.Key == "" {
+			return nil, fmt.Errorf("ginput: page %d: key is required", i)
+		}
+		p, err := NewPageFromDef(pd)
+		if err != nil {
+			return nil, err
+		}
+		mf.AddPage(p)
+	}
+	return mf, nil
+}
+
+// NewMultiFormFromJSON parses a JSON multi-form definition and returns a
+// configured *MultiForm ready to call Read() on.
+//
+// Returns an error if the JSON is malformed or any field/page definition is invalid.
+func NewMultiFormFromJSON(data []byte) (*MultiForm, error) {
+	var def MultiFormDef
+	if err := json.Unmarshal(data, &def); err != nil {
+		return nil, fmt.Errorf("ginput: parse multi-form JSON: %w", err)
+	}
+	return NewMultiFormFromDef(def)
+}

@@ -121,9 +121,10 @@ func New(maxLen int) *Input {
 		maxLen = 1
 	}
 	return &Input{
-		maxLen: maxLen,
-		in:     os.Stdin,
-		out:    os.Stdout,
+		maxLen:    maxLen,
+		showField: true,
+		in:        os.Stdin,
+		out:       os.Stdout,
 	}
 }
 

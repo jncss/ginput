@@ -24,7 +24,8 @@ Terminal is put into *raw* mode; all rendering and editing is managed internally
 13. [Persisting form values](#persisting-form-values)
 14. [Color system](#color-system)
 15. [Errors](#errors)
-16. [Project structure](#project-structure)
+16. [Multi-page forms (`MultiForm`)](#multi-page-forms-multiform)
+17. [Project structure](#project-structure)
 
 ---
 
@@ -930,6 +931,190 @@ default:
 
 ---
 
+## Multi-page forms (`MultiForm`)
+
+A `MultiForm` groups several `Page` objects into one interactive session. The
+user navigates between pages with **PageUp / PageDown**. A common global
+header, footer, and status line are displayed on every page; each page can also
+define its own per-page title.
+
+Because field keys may be reused across different pages, the result of
+`Read()` is `map[string]map[string]string` — the outer key identifies the
+page, the inner key identifies the field.
+
+---
+
+### `Page` — constructing a page
+
+#### Constructor
+
+```go
+func NewPage(key string) *Page
+```
+
+`key` is the page's unique identifier used in the result map and in page-level
+callbacks.
+
+#### Adding fields
+
+The same field methods available on `Form` are mirrored on `Page`:
+
+| Method | Description |
+|--------|-------------|
+| `Add(key string, inp *Input) *Page` | Text field |
+| `AddNumeric(key string, n *NumericInput) *Page` | Numeric field |
+| `AddLabel(key string, l *Label) *Page` | Read-only label |
+| `AddSeparator() *Page` | Blank separator line |
+| `GetLabel(key string) *Label` | Retrieve a label at runtime |
+
+#### Page configuration (chainable)
+
+| Method | Description |
+|--------|-------------|
+| `WithPageHeader(text string) *Page` | Title shown above the page's fields (may contain `\n`) |
+| `WithPageHeaderColor(c Color) *Page` | ANSI color for the page title |
+| `WithLabelColor(c Color) *Page` | Default prompt color for this page's fields |
+| `WithInputColor(c Color) *Page` | Default input-area color for this page's fields |
+| `WithContentOffsetX(n int) *Page` | Extra left margin added on top of the MultiForm offset |
+
+#### Per-field callbacks on a page
+
+| Method | Description |
+|--------|-------------|
+| `OnEnter(key, fn) *Page` | Fired when focus enters the field. `fn(key string, vals map[string]string)` |
+| `OnExit(key, fn) *Page` | Fired when focus leaves the field. Same signature |
+| `OnChange(key, fn) *Page` | Fired on every character change. `fn(key, value string)` |
+
+`vals` is a snapshot of **this page's** field values.
+
+#### Runtime helpers on a page
+
+```go
+func (p *Page) GetValue(key string) string
+func (p *Page) SetValue(key string, val string)
+```
+
+---
+
+### `MultiForm` — constructing the multi-page form
+
+#### Constructor
+
+```go
+func NewMultiForm() *MultiForm
+```
+
+Reads from `os.Stdin`, writes to `os.Stdout`.
+
+#### Building the form (chainable)
+
+| Method | Description |
+|--------|-------------|
+| `AddPage(p *Page) *MultiForm` | Append a page |
+| `WithHeader(text string) *MultiForm` | Global header shown above every page |
+| `WithHeaderColor(c Color) *MultiForm` | Color for the global header |
+| `WithFooter(text string) *MultiForm` | Global footer shown below every page |
+| `WithFooterColor(c Color) *MultiForm` | Color for the global footer |
+| `WithOffsetX(n int) *MultiForm` | Left-column margin for the whole form |
+| `WithOffsetY(n int) *MultiForm` | Blank lines printed above the form |
+| `WithStatusColor(c Color) *MultiForm` | Enable status area with the given color |
+| `WithSubmitKey(key byte) *MultiForm` | Override the submit byte (default `\r`) |
+| `WithSubmitFn(n int) *MultiForm` | Use function key F*n* as the submit trigger |
+| `WithStayOnForm() *MultiForm` | Stay active after each submit (exit only on Ctrl-C / Ctrl-D / non-nil OnSubmit error) |
+| `Focus(pageKey, fieldKey string) *MultiForm` | Focus target after a stay-on-form redraw |
+
+#### Callbacks (chainable)
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `OnSubmit(fn) *MultiForm` | `fn(all map[string]map[string]string) error` | Called when the form is submitted. Non-nil error exits `Read`. |
+| `OnPageChange(fn) *MultiForm` | `fn(pageKey string, all map[string]map[string]string)` | Fired on every page switch. |
+| `OnFn(n int, fn) *MultiForm` | `fn(all map[string]map[string]string) error` | Fired when F*n* is pressed. |
+| `OnCtrl(char byte, fn) *MultiForm` | `fn(all map[string]map[string]string) error` | Fired when Ctrl+*char* is pressed. |
+
+#### Status line methods
+
+```go
+func (mf *MultiForm) SetStatus(msg string, clearAfterSecs int)
+func (mf *MultiForm) ClearStatus()
+```
+
+#### Runtime helpers
+
+```go
+func (mf *MultiForm) GetValue(pageKey, fieldKey string) string
+func (mf *MultiForm) SetValue(pageKey, fieldKey, val string)
+func (mf *MultiForm) GetPage(key string) *Page
+func (mf *MultiForm) ClearScreen()
+```
+
+#### `Read() (map[string]map[string]string, error)`
+
+Puts the terminal in raw mode and starts the interactive session.
+Returns `map[pageKey]map[fieldKey]value` on success.
+
+Errors: `ginput.ErrInterrupt` (Ctrl-C) and `ginput.ErrEOF` (Ctrl-D on empty).
+
+---
+
+### Navigation keys
+
+| Key | Action |
+|-----|--------|
+| Tab, ↓ Arrow | Next field within the current page |
+| Shift-Tab, ↑ Arrow | Previous field within the current page |
+| PageDown | Next page (wraps) |
+| PageUp | Previous page (wraps) |
+| Enter | Advance field; on last field of a non-last page moves to next page; on last field of last page submits |
+| Ctrl-C | Return `ErrInterrupt` |
+| Ctrl-D | Return `ErrEOF` (only when active field is empty) |
+
+---
+
+### Complete example
+
+See `example/pages/main.go` for the runnable version. Abbreviated:
+
+```go
+var mf *ginput.MultiForm
+
+func main() {
+    personal := ginput.NewPage("personal").
+        WithPageHeader("Personal data").
+        WithPageHeaderColor(ginput.ColorCyan).
+        Add("name",  ginput.New(40).WithPrompt("Full name: ")).
+        Add("email", ginput.New(60).WithPrompt("E-mail:    "))
+
+    address := ginput.NewPage("address").
+        WithPageHeader("Address").
+        WithPageHeaderColor(ginput.ColorGreen).
+        Add("street",  ginput.New(60).WithPrompt("Street:  ")).
+        Add("country", ginput.New(30).WithPrompt("Country: ").WithDefault("Spain"))
+
+    mf = ginput.NewMultiForm().
+        WithHeader("=== Registration ===").
+        WithFooter("PageUp/PageDown to switch pages  │  Enter on last field submits").
+        WithStatusColor(ginput.ColorMagenta).
+        WithOffsetX(2).
+        AddPage(personal).
+        AddPage(address).
+        OnPageChange(func(pageKey string, _ map[string]map[string]string) {
+            mf.SetStatus("Now on page: "+pageKey, 3)
+        }).
+        OnSubmit(func(all map[string]map[string]string) error {
+            fmt.Println("name:", all["personal"]["name"])
+            fmt.Println("street:", all["address"]["street"])
+            return nil
+        })
+
+    mf.ClearScreen()
+    results, err := mf.Read()
+    // … handle err, use results
+}
+```
+
+---
+
 ## Project structure
 
 ```
@@ -943,12 +1128,15 @@ ginput/
 ├── formjson.go      ← NewFormFromJSON / NewFormFromDef
 ├── formvalues.go    ← SaveValues / LoadValues / LoadAndApplyDefaults
 ├── fnkeys.go        ← F1–F12 key sequences
+├── multiform.go     ← MultiForm + Page
 ├── doc/
 │   └── README.md    ← this file
 └── example/
     ├── main.go      ← single-field + form examples
     ├── json/
     │   └── main.go  ← JSON form with F10 submit + SaveValues
-    └── mysql/
-        └── main.go  ← MySQL export: OnSubmit + StayOnForm + SetStatus
+    ├── mysql/
+    │   └── main.go  ← MySQL export: OnSubmit + StayOnForm + SetStatus
+    └── pages/
+        └── main.go  ← multi-page form: 3 pages + OnPageChange + OnSubmit validation
 ```

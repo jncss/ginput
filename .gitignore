@@ -10,9 +10,12 @@
 
 # Output of go build on the example programs
 example/main
+example/json/json
 example/json/form_values.json
 example/mysql/mysql_create
 example/mysql/*.sql
+example/pages/pages_example
+example/pages_json/pages_json_example
 
 # Go workspace
 go.work

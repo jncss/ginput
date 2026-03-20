@@ -1,0 +1,42 @@
+{
+  "header": "══════════════════════════════════════\n  User registration – multi-page form\n══════════════════════════════════════",
+  "headerColor": "white",
+  "footer": "Tab/↑↓ navigate fields  │  PageUp/PageDown change page  │  Enter on last field submits",
+  "footerColor": "blue",
+  "statusColor": "magenta",
+  "offsetX": 2,
+  "offsetY": 1,
+  "pages": [
+    {
+      "key": "personal",
+      "pageHeader": "Personal data",
+      "pageHeaderColor": "cyan",
+      "fields": [
+        { "key": "name",  "prompt": "Full name    : ", "maxLen": 40 },
+        { "key": "email", "prompt": "E-mail       : ", "maxLen": 60 },
+        { "key": "phone", "prompt": "Phone        : ", "maxLen": 20 }
+      ]
+    },
+    {
+      "key": "address",
+      "pageHeader": "Address",
+      "pageHeaderColor": "green",
+      "fields": [
+        { "key": "street",  "prompt": "Street       : ", "maxLen": 60 },
+        { "key": "city",    "prompt": "City         : ", "maxLen": 40 },
+        { "key": "country", "prompt": "Country      : ", "maxLen": 30, "default": "Spain" },
+        { "key": "zip",     "prompt": "ZIP code     : ", "maxLen": 10 }
+      ]
+    },
+    {
+      "key": "account",
+      "pageHeader": "Account",
+      "pageHeaderColor": "yellow",
+      "fields": [
+        { "key": "username",  "prompt": "Username     : ", "maxLen": 30 },
+        { "key": "password",  "prompt": "Password     : ", "maxLen": 30, "mask": "*" },
+        { "key": "password2", "prompt": "Confirm pwd  : ", "maxLen": 30, "mask": "*" }
+      ]
+    }
+  ]
+}
