@@ -1115,6 +1115,156 @@ func main() {
 
 ---
 
+### Loading a MultiForm from JSON
+
+The entire form structure — global header/footer, pages, fields, colors, offsets,
+and submit trigger — can be declared in a JSON file and parsed with a single call.
+Callbacks (`OnSubmit`, `OnPageChange`, `OnFn`, `OnCtrl`) and runtime methods
+(`SetStatus`, `SetValue`, …) are then registered in Go code after parsing.
+
+#### Constructor functions
+
+| Function | Description |
+|---|---|
+| `NewMultiFormFromJSON(data []byte) (*MultiForm, error)` | Parses JSON and returns a configured `*MultiForm` |
+| `NewMultiFormFromDef(def MultiFormDef) (*MultiForm, error)` | Builds a `*MultiForm` from a `MultiFormDef` struct |
+| `NewPageFromDef(def PageDef) (*Page, error)` | Builds a single `*Page` from a `PageDef` struct |
+
+After creation you can chain any of the builder methods before calling `Read()`.
+
+#### Top-level JSON keys (`MultiFormDef`)
+
+| Key | Type | Description |
+|---|---|---|
+| `header` | string | Global header shown above every page (supports `\n`) |
+| `headerColor` | string | Color name for the global header |
+| `footer` | string | Global footer shown below every page (supports `\n`) |
+| `footerColor` | string | Color name for the global footer |
+| `statusColor` | string | Color for the status line; enabling this also reserves the status area |
+| `offsetX` | int | Left-column margin for the entire form |
+| `offsetY` | int | Blank lines printed above the form |
+| `submitKey` | int | ASCII code of the submit key (0 or omit = Enter / `\r`) |
+| `submitFn` | int | F-key number 1–12 as submit trigger (ignored when `submitKey` ≠ 0) |
+| `pages` | array | Ordered list of page definitions (see below) |
+
+#### Page JSON keys (`PageDef`)
+
+| Key | Type | Description |
+|---|---|---|
+| `key` | string | **Required.** Unique page identifier; used as outer key in results map |
+| `pageHeader` | string | Per-page title shown above the fields (supports `\n`) |
+| `pageHeaderColor` | string | Color name for the page title |
+| `labelColor` | string | Default prompt color for all fields on this page |
+| `inputColor` | string | Default editable-area color for all fields on this page |
+| `contentOffsetX` | int | Extra left margin for the fields on this page |
+| `fields` | array | Field definitions — same `FieldDef` schema used by `FormDef` |
+
+Each entry in `fields` follows the [Field JSON keys](#field-json-keys) table from
+the JSON-defined forms section (type, prompt, maxLen, mask, default, validators, …).
+
+#### Pre-filling defaults (`ApplyPageDefaults` / `ApplyAllDefaults`)
+
+Before calling `NewMultiFormFromDef`, you can inject previously-saved values as
+field defaults:
+
+```go
+var def ginput.MultiFormDef
+json.Unmarshal(data, &def)
+
+// From a flat map for one page:
+def.ApplyPageDefaults("address", map[string]string{"country": "Spain"})
+
+// From a full results map (e.g. returned by a previous Read):
+def.ApplyAllDefaults(savedResults) // savedResults is map[string]map[string]string
+
+mf, _ := ginput.NewMultiFormFromDef(def)
+```
+
+#### Full JSON example
+
+```json
+{
+  "header": "══════════════════════\n  User registration\n══════════════════════",
+  "headerColor": "white",
+  "footer": "Tab/↑↓ navigate fields  │  PageUp/PageDown change page  │  Enter submits",
+  "footerColor": "blue",
+  "statusColor": "magenta",
+  "offsetX": 2,
+  "offsetY": 1,
+  "pages": [
+    {
+      "key": "personal",
+      "pageHeader": "Personal data",
+      "pageHeaderColor": "cyan",
+      "fields": [
+        { "key": "name",  "prompt": "Full name : ", "maxLen": 40 },
+        { "key": "email", "prompt": "E-mail    : ", "maxLen": 60 },
+        { "key": "phone", "prompt": "Phone     : ", "maxLen": 20 }
+      ]
+    },
+    {
+      "key": "address",
+      "pageHeader": "Address",
+      "pageHeaderColor": "green",
+      "fields": [
+        { "key": "street",  "prompt": "Street  : ", "maxLen": 60 },
+        { "key": "city",    "prompt": "City    : ", "maxLen": 40 },
+        { "key": "country", "prompt": "Country : ", "maxLen": 30, "default": "Spain" },
+        { "key": "zip",     "prompt": "ZIP     : ", "maxLen": 10 }
+      ]
+    },
+    {
+      "key": "account",
+      "pageHeader": "Account",
+      "pageHeaderColor": "yellow",
+      "fields": [
+        { "key": "username",  "prompt": "Username : ", "maxLen": 30 },
+        { "key": "password",  "prompt": "Password : ", "maxLen": 30, "mask": "*" },
+        { "key": "password2", "prompt": "Confirm  : ", "maxLen": 30, "mask": "*" }
+      ]
+    }
+  ]
+}
+```
+
+#### Loading and wiring callbacks
+
+```go
+var mf *ginput.MultiForm
+
+func main() {
+    data, _ := os.ReadFile("form.json")
+    mf, _ = ginput.NewMultiFormFromJSON(data)
+
+    mf.OnPageChange(func(pageKey string, _ map[string]map[string]string) {
+        hints := map[string]string{
+            "personal": "Page 1/3 – personal details",
+            "address":  "Page 2/3 – postal address",
+            "account":  "Page 3/3 – login credentials",
+        }
+        mf.SetStatus(hints[pageKey], 0)
+    })
+
+    mf.OnSubmit(func(all map[string]map[string]string) error {
+        if all["account"]["password"] != all["account"]["password2"] {
+            mf.SetStatus("Passwords do not match", 5)
+            mf.SetValue("account", "password", "")
+            mf.SetValue("account", "password2", "")
+            return fmt.Errorf("passwords mismatch")
+        }
+        return nil
+    })
+
+    mf.ClearScreen()
+    results, err := mf.Read()
+    // … handle err, use results
+}
+```
+
+See `example/pages_json/` for the complete runnable version.
+
+---
+
 ## Project structure
 
 ```
@@ -1137,6 +1287,9 @@ ginput/
     │   └── main.go  ← JSON form with F10 submit + SaveValues
     ├── mysql/
     │   └── main.go  ← MySQL export: OnSubmit + StayOnForm + SetStatus
-    └── pages/
-        └── main.go  ← multi-page form: 3 pages + OnPageChange + OnSubmit validation
+    ├── pages/
+    │   └── main.go  ← multi-page form: 3 pages + OnPageChange + OnSubmit validation
+    └── pages_json/
+        ├── form.json  ← form definition (header, footer, pages, fields, colors)
+        └── main.go    ← load form.json + wire callbacks + Read()
 ```
